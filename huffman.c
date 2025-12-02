@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Структурочка
+// Структурочка 
 typedef struct Node {
     unsigned char symbol;       // символ (байт)
     int freq;                   // частота встречаемости
@@ -13,10 +13,10 @@ typedef struct Node {
 Node* create_node(unsigned char symbol, int freq, Node* left, Node* right);
 Node* build_tree_from_frequencies(int freq[256]);
 void generate_codes(Node* node, char code[], int depth, char* codes[256]);
-void free_tree(Node* node);
 void encode_file(char* codes[256]);
 void decode_file(Node* root);
 int files_equal(const char* file1, const char* file2);
+void free_tree(Node* node);
 
 Node* create_node(unsigned char symbol, int freq, Node* left, Node* right){
     Node* node = (Node*)malloc(sizeof(Node));
@@ -37,7 +37,6 @@ Node* build_tree_from_frequencies(int freq[256]) {
     Node* leaves[256];
     int leaf_count = 0;
 
-    // Создаём листья
     for (int i = 0; i < 256; i++) {
         if (freq[i] > 0) {
             leaves[leaf_count] = create_node((unsigned char)i, freq[i], NULL, NULL);
@@ -45,7 +44,6 @@ Node* build_tree_from_frequencies(int freq[256]) {
         }
     }
 
-    // Крайние случаи
     if (leaf_count == 0) {
         return NULL;
     }
@@ -53,9 +51,7 @@ Node* build_tree_from_frequencies(int freq[256]) {
         return leaves[0];
     }
 
-    // Основной цикл объединения
     while (leaf_count > 1) {
-        // Находим два минимума
         int min1 = 0;
         int min2 = 1;
         if (leaves[min1]->freq > leaves[min2]->freq) {
@@ -73,14 +69,12 @@ Node* build_tree_from_frequencies(int freq[256]) {
             }
         }
 
-        // Объединяем в новый узел
-        Node* merged = create_node(0, 
-                                   leaves[min1]->freq + leaves[min2]->freq,
-                                   leaves[min1], 
-                                   leaves[min2]);
+        Node* combined = create_node(0, 
+            leaves[min1]->freq+leaves[min2]->freq,
+             leaves[min1],
+              leaves[min2]);
 
-        // Заменяем min1 на merged, удаляем min2
-        leaves[min1] = merged;
+        leaves[min1] = combined;
         leaves[min2] = leaves[leaf_count - 1];
         leaf_count--;
     }
@@ -88,16 +82,13 @@ Node* build_tree_from_frequencies(int freq[256]) {
     return leaves[0];
 }
 
-// Рекурсивно обходит дерево и сохраняет коды в массив codes[]
 void generate_codes(Node* node, char code[], int depth, char* codes[256]) {
-    // Если это лист — сохраняем код
     if (node->left == NULL && node->right == NULL) {
-        code[depth] = '\0';  // завершаем строку
-        codes[node->symbol] = strdup(code);  // копируем
+        code[depth] = '\0'; 
+        codes[node->symbol] = strdup(code);  
         return;
     }
 
-    // Иначе — внутренний узел: идём влево и вправо
     code[depth] = '0';
     generate_codes(node->left, code, depth + 1, codes);
 
@@ -105,36 +96,132 @@ void generate_codes(Node* node, char code[], int depth, char* codes[256]) {
     generate_codes(node->right, code, depth + 1, codes);
 }
 
-int main() {
-    // Массив для хранения частот всех 256 возможных значений байта
-    int freq[256] = {0}; // автоматически заполняется нулями
 
-    // Пытаемся открыть файл в бинарном режиме
+void encode_file(char* codes[256]){
+    FILE *in = fopen("input.txt", "rb");
+    if (in==NULL){
+        fprintf(stderr, "Mistake, impossible to open input.txt\n");
+        exit(1);
+    }
+
+    FILE *chuff = fopen("compressed.huff", "w");
+    if (chuff==NULL){
+        fprintf(stderr, "hmm, seems like it wasnt made at all");
+        exit(1);
+    }
+int ch;
+while ((ch=fgetc(in))!= EOF){
+       if (ch >= 0 && ch < 256 && codes[ch] != NULL){
+            fputs (codes[ch], chuff);
+    }
+}
+fclose(in);
+fclose(chuff);
+}
+
+
+void decode_file(Node* root) {
+    FILE* in = fopen("compressed.huff", "r");
+    if (!in) {
+        fprintf(stderr, "impossiblle to open compressed.huff for decoding.\n");
+        exit(1);
+    }
+
+    FILE* out = fopen("decompressed.txt", "wb"); 
+    if (!out) {
+        fprintf(stderr, "Impossiblle to create decompressed.txt.\n");
+        fclose(in);
+        exit(1);
+    }
+
+    Node* current = root;
+    int bit;
+
+    while ((bit = fgetc(in)) != EOF) {
+        if (bit == '0') {
+            current = current->left;
+        } else if (bit == '1') {
+            current = current->right;
+        } else {
+            continue;
+        }
+
+        if (current->left == NULL && current->right == NULL) {
+            fputc(current->symbol, out);
+            current = root; 
+        }
+    }
+
+    fclose(in);
+    fclose(out);
+}
+
+int files_equal(const char* file1, const char* file2) {
+    FILE* f1 = fopen(file1, "rb");
+    FILE* f2 = fopen(file2, "rb");
+
+    if (f1 == NULL || f2 == NULL) {
+        if (f1) fclose(f1);
+        if (f2) fclose(f2);
+        return 0;
+    }
+
+    int ch1, ch2;
+    while (1) {
+        ch1 = fgetc(f1);
+        ch2 = fgetc(f2);
+
+        if (ch1 != ch2) {
+            fclose(f1);
+            fclose(f2);
+            return 0;
+        }
+
+        if (ch1 == EOF) {
+            break;
+        }
+    }
+
+    fclose(f1);
+    fclose(f2);
+    return 1;
+}
+
+void free_tree(Node* node) {
+    if (node == NULL) return;
+    free_tree(node->left);
+    free_tree(node->right);
+    free(node);
+}
+
+     
+int main() {
+
+    int freq[256] = {0}; 
+
     FILE *fp = fopen("input.txt", "rb");
     if (fp == NULL) {
-        printf("ERROR: Failed to open input.txt\n");
+        printf("impossiblle to open input.txt\n");
         return 1;
     }
 
-    // Читаем файл по одному байту и увеличиваем счётчик в таблице
     int ch;
     while ((ch = fgetc(fp)) != EOF) {
-        // fgetc возвращает int, но значения в диапазоне 0–255 (или EOF)
+       
         if (ch >= 0 && ch < 256) {
             freq[ch]++;
         }
     }
     fclose(fp);
 
-    // Выводим таблицу частот только для символов, которые встретились
     printf("=== My cutie frequency Table ===\n");
     for (int i = 0; i < 256; i++) {
         if (freq[i] > 0) {
             if (i >= 32 && i <= 126) {
-                // Печатаемые ASCII-символы: выводим как 'A', '5', '+'
+                // Печатаемые адские ASCII-символы
                 printf("'%c' (code %3d): %d time\n", (char)i, i, freq[i]);
             } else {
-                // Непечатаемые символы (например, перевод строки, табуляция)
+                // Непечатаемые символы 
                 printf("(code %3d): %d time\n", i, freq[i]);
             }
         }
@@ -148,16 +235,16 @@ if (root == NULL) {
     return 1;
 }
 
-// Массив для кодов: все указатели = NULL
+
 char* codes[256] = {0};
 
-// Буфер для формирования кода (макс. длина < 256)
+
 char code_buffer[256];
 
-// Генерируем коды
+
 generate_codes(root, code_buffer, 0, codes);
 
-// Выводим
+
 for (int i = 0; i < 256; i++) {
     if (codes[i] != NULL) {
         if (i >= 32 && i <= 126) {
@@ -167,5 +254,23 @@ for (int i = 0; i < 256; i++) {
         }
     }
 }
+
+encode_file(codes);
+
+decode_file(root);  
+
+if (files_equal("input.txt", "decompressed.txt")) {
+    printf("Slayyyy! Files are not diffrenet.\n");
+} else {
+    printf("Pupupu, files are different((((.\n");
+}
+
+
+for (int i = 0; i < 256; i++) {
+    free(codes[i]); 
+}
+
+free_tree(root);
+
     return 0;
 }
